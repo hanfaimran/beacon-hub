@@ -7,6 +7,17 @@ load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
 
+def get_db_connection():
+    if not DATABASE_URL:
+        conn = sqlite3.connect("beacon_hub.db")
+        conn.row_factory = sqlite3.Row
+        return conn
+    else:
+        import psycopg
+        from psycopg.rows import dict_row
+        return psycopg.connect(DATABASE_URL, row_factory=dict_row)
+
+
 CREATE_TABLES_SQL = """
 CREATE TABLE IF NOT EXISTS opportunities (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -24,6 +35,7 @@ CREATE TABLE IF NOT EXISTS opportunities (
     entry_fee TEXT,
     source_domain TEXT,
     verified INTEGER DEFAULT 0,
+    dates_missing INTEGER DEFAULT 0,
     source_text_snippet TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
@@ -74,6 +86,12 @@ def init_db():
         cursor = conn.cursor()
         cursor.executescript(CREATE_TABLES_SQL)
         
+        # Migration for dates_missing column
+        cursor.execute("PRAGMA table_info(opportunities)")
+        columns = [column[1] for column in cursor.fetchall()]
+        if "dates_missing" not in columns:
+            cursor.execute("ALTER TABLE opportunities ADD COLUMN dates_missing INTEGER DEFAULT 0")
+        
         cursor.execute("SELECT COUNT(*) FROM calendar_tags")
         if cursor.fetchone()[0] == 0:
             cursor.executemany(
@@ -91,6 +109,14 @@ def init_db():
                 pg_sql = pg_sql.replace("INTEGER DEFAULT 1", "BOOLEAN DEFAULT TRUE")
                 cursor.execute(pg_sql)
                 
+                cursor.execute("""
+                    SELECT column_name 
+                    FROM information_schema.columns 
+                    WHERE table_name='opportunities' AND column_name='dates_missing'
+                """)
+                if not cursor.fetchone():
+                    cursor.execute("ALTER TABLE opportunities ADD COLUMN dates_missing BOOLEAN DEFAULT FALSE")
+                
                 cursor.execute("SELECT COUNT(*) FROM calendar_tags")
                 if cursor.fetchone()[0] == 0:
                     cursor.executemany(
@@ -98,6 +124,7 @@ def init_db():
                         [(t[0], t[1], True if t[2] else False) for t in SEED_TAGS]
                     )
                 conn.commit()
+
 
 if __name__ == "__main__":
     init_db()

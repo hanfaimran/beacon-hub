@@ -2,9 +2,13 @@ import os
 import hashlib
 import json
 import sqlite3
+import logging
 from typing import List, Dict, Any
 import httpx
 from dotenv import load_dotenv
+
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 load_dotenv()
 
