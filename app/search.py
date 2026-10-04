@@ -75,7 +75,11 @@ def search_serpapi(query: str) -> List[Dict[str, Any]]:
             "engine": "google"
         }
         
-        response = httpx.get("https://serpapi.com/search", params=params, timeout=30.0)
+        _serpapi_timeout = httpx.Timeout(60.0, connect=10.0)
+        try:
+            response = httpx.get("https://serpapi.com/search", params=params, timeout=_serpapi_timeout)
+        except httpx.TimeoutException:
+            response = httpx.get("https://serpapi.com/search", params=params, timeout=_serpapi_timeout)
         response.raise_for_status()
         data = response.json()
 

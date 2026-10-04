@@ -24,7 +24,10 @@ TRUSTED_DOMAINS = {
     "huggingface.co",
     "kaggle.com",
     "github.com",
-    "linkedin.com",
+    "sans.org",
+    "giac.org",
+    "nist.gov",
+    "cisa.gov",
 }
 
 
