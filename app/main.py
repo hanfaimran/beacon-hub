@@ -2,11 +2,13 @@ from fastapi import FastAPI, Query, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse
 from typing import Optional, Dict, Any, List
+import json
 import math
 import logging
 import os
 import re
 from datetime import datetime, timezone
+from pathlib import Path
 from pydantic import BaseModel
 from temporalio.client import Client
 from temporalio.exceptions import WorkflowAlreadyStartedError
@@ -19,25 +21,84 @@ logger = logging.getLogger(__name__)
 
 HEX_COLOR_REGEX = re.compile(r"^#[0-9a-fA-F]{6}$")
 TEMPORAL_TARGET = os.getenv("TEMPORAL_TARGET", "localhost:7233")
+TEMPORAL_ENABLED = os.getenv("TEMPORAL_ENABLED", "0").strip() == "1"
+ADMIN_MODE = os.getenv("ADMIN_MODE", "0").strip() == "1"
+
+# Paths resolved relative to this file so they work from any CWD
+_HERE = Path(__file__).resolve().parent
+_ROOT = _HERE.parent
+_STATIC_DIR = _HERE / "static"
+_TEMPLATES_DIR = _HERE / "templates"
+_SEED_FILE = _ROOT / "seed" / "opportunities.json"
 
 app = FastAPI(title="Beacon Hub API")
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
+app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
+
 
 
 @app.get("/", response_class=HTMLResponse)
 def read_root():
-    return FileResponse("app/templates/index.html")
+    return FileResponse(str(_TEMPLATES_DIR / "index.html"))
 
-# Ensure DB tables are initialized
+
+def _seed_from_json():
+    """Load seed/opportunities.json into an empty opportunities table."""
+    if not _SEED_FILE.exists():
+        return
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        placeholder = "%s" if DATABASE_URL else "?"
+        cursor.execute("SELECT COUNT(*) FROM opportunities")
+        res = cursor.fetchone()
+        count = res["count"] if isinstance(res, dict) else res[0]
+        if count > 0:
+            return
+
+        with open(_SEED_FILE, "r", encoding="utf-8") as f:
+            records = json.load(f)
+
+        cols = [
+            "title", "url", "domain", "category", "mode", "organization", "location",
+            "about", "event_date_utc", "deadline_utc", "rewards", "entry_fee",
+            "source_domain", "verified", "dates_missing", "source_text_snippet", "created_at",
+        ]
+        ph = ", ".join([placeholder] * len(cols))
+        col_list = ", ".join(cols)
+        if DATABASE_URL:
+            sql = f"INSERT INTO opportunities ({col_list}) VALUES ({ph}) ON CONFLICT (url) DO NOTHING"
+        else:
+            sql = f"INSERT OR IGNORE INTO opportunities ({col_list}) VALUES ({ph})"
+
+        inserted = 0
+        for rec in records:
+            values = [rec.get(c) for c in cols]
+            cursor.execute(sql, values)
+            inserted += 1
+        conn.commit()
+        logger.info(f"Seeded {inserted} opportunities from {_SEED_FILE}")
+    except Exception as e:
+        logger.warning(f"Seed from JSON failed: {e}")
+    finally:
+        conn.close()
+
+
+# Ensure DB tables are initialized and seed if empty
 try:
     init_db()
+    _seed_from_json()
 except Exception as e:
     logger.warning(f"Could not auto-initialize DB: {e}")
 
 
 async def get_temporal_client() -> Optional[Client]:
+    if not TEMPORAL_ENABLED:
+        return None
     try:
-        client = await Client.connect(TEMPORAL_TARGET)
+        client = await Client.connect(
+            TEMPORAL_TARGET,
+            rpc_metadata={"deadline": "2"},  # 2-second connect timeout
+        )
         return client
     except Exception as e:
         logger.warning(f"Could not connect to Temporal at {TEMPORAL_TARGET}: {e}")
@@ -596,3 +657,19 @@ def mark_reminder_seen(id: int):
         return {"message": "Marked as seen", "id": id}
     finally:
         conn.close()
+
+
+# --- Admin Endpoints ---
+# SerpApi and Ollama are invoked only by CLI scripts (seed.py, pipeline.py).
+# The sole admin HTTP endpoint below re-loads the JSON seed file; it never
+# calls SerpApi or Ollama directly.
+
+
+@app.post("/api/admin/seed")
+def admin_seed():
+    """Re-load seed/opportunities.json (always skips existing URLs).
+    Requires ADMIN_MODE=1 env var; returns 403 otherwise."""
+    if not ADMIN_MODE:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    _seed_from_json()
+    return {"message": "Seed attempted from JSON file"}

@@ -1,5 +1,6 @@
 import os
 import sqlite3
+from pathlib import Path
 from typing import Optional, Dict, Any, List
 from dotenv import load_dotenv
 
@@ -7,15 +8,25 @@ load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
 
+# Resolve SQLite path relative to the project root (parent of this package),
+# never the shell's working directory.
+_HERE = Path(__file__).resolve().parent
+_ROOT = _HERE.parent
+_DB_PATH = os.getenv("DB_PATH", "beacon.db")
+if not os.path.isabs(_DB_PATH):
+    _DB_PATH = str(_ROOT / _DB_PATH)
+
+
 def get_db_connection():
     if not DATABASE_URL:
-        conn = sqlite3.connect("beacon_hub.db")
+        conn = sqlite3.connect(_DB_PATH)
         conn.row_factory = sqlite3.Row
         return conn
     else:
         import psycopg
         from psycopg.rows import dict_row
         return psycopg.connect(DATABASE_URL, row_factory=dict_row)
+
 
 
 CREATE_TABLES_SQL = """
@@ -93,8 +104,7 @@ SEED_TAGS = [
 
 def init_db():
     if not DATABASE_URL:
-        db_path = "beacon_hub.db"
-        conn = sqlite3.connect(db_path)
+        conn = sqlite3.connect(_DB_PATH)
         cursor = conn.cursor()
         cursor.executescript(CREATE_TABLES_SQL)
         
