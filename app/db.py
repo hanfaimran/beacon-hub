@@ -71,6 +71,18 @@ CREATE TABLE IF NOT EXISTS searches_log (
     ts TEXT DEFAULT CURRENT_TIMESTAMP,
     cached INTEGER DEFAULT 0
 );
+
+CREATE TABLE IF NOT EXISTS reminders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    opportunity_id INTEGER NOT NULL,
+    kind TEXT CHECK(kind IN ('7d', '3d', '1d', 'day_of', 'demo')) NOT NULL,
+    due_at_utc TEXT NOT NULL,
+    fired_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    message TEXT NOT NULL,
+    seen INTEGER DEFAULT 0,
+    UNIQUE(opportunity_id, kind),
+    FOREIGN KEY (opportunity_id) REFERENCES opportunities(id) ON DELETE CASCADE
+);
 """
 
 SEED_TAGS = [

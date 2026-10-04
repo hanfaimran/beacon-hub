@@ -178,3 +178,39 @@ def test_tag_color_change_does_not_modify_opportunity():
     opp1 = next(o for o in opps if o["id"] == 1)
     assert opp1["title"] == "Cyber Hackathon"
     assert opp1["domain"] == "cyber"
+
+
+def test_reminders_api_endpoints():
+    # Insert a dummy reminder directly into test DB
+    from app.main import get_db_connection as get_test_conn
+    conn = get_test_conn()
+    cursor = conn.cursor()
+    cursor.execute(
+        """INSERT INTO reminders (opportunity_id, kind, due_at_utc, message, seen)
+           VALUES (?, ?, ?, ?, ?)""",
+        (1, "3d", "2026-10-09T10:00:00Z", "Cyber Hackathon: deadline in 3 days", 0),
+    )
+    conn.commit()
+    rem_id = cursor.lastrowid
+    conn.close()
+
+    # GET /api/reminders
+    res_get = client.get("/api/reminders")
+    assert res_get.status_code == 200
+    reminders = res_get.json()
+    assert len(reminders) >= 1
+    rem = next(r for r in reminders if r["id"] == rem_id)
+    assert rem["seen"] is False
+    assert rem["kind"] == "3d"
+    assert rem["opportunity_title"] == "Cyber Hackathon"
+
+    # POST /api/reminders/{id}/seen
+    res_seen = client.post(f"/api/reminders/{rem_id}/seen")
+    assert res_seen.status_code == 200
+    assert res_seen.json()["id"] == rem_id
+
+    # Verify seen is now True
+    res_get2 = client.get("/api/reminders")
+    rem2 = next(r for r in res_get2.json() if r["id"] == rem_id)
+    assert rem2["seen"] is True
+

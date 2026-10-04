@@ -2,17 +2,68 @@ from fastapi import FastAPI, Query, HTTPException
 from typing import Optional, Dict, Any, List
 import math
 import logging
+import os
 import re
 from datetime import datetime, timezone
 from pydantic import BaseModel
-from app.db import get_db_connection, DATABASE_URL
+from temporalio.client import Client
+from temporalio.exceptions import WorkflowAlreadyStartedError
+
+from app.db import get_db_connection, DATABASE_URL, init_db
 
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
+logger = logging.getLogger(__name__)
 
 HEX_COLOR_REGEX = re.compile(r"^#[0-9a-fA-F]{6}$")
+TEMPORAL_TARGET = os.getenv("TEMPORAL_TARGET", "localhost:7233")
 
 app = FastAPI(title="Beacon Hub API")
+
+# Ensure DB tables are initialized
+try:
+    init_db()
+except Exception as e:
+    logger.warning(f"Could not auto-initialize DB: {e}")
+
+
+async def get_temporal_client() -> Optional[Client]:
+    try:
+        client = await Client.connect(TEMPORAL_TARGET)
+        return client
+    except Exception as e:
+        logger.warning(f"Could not connect to Temporal at {TEMPORAL_TARGET}: {e}")
+        return None
+
+
+async def start_reminder_workflow(opportunity_id: int):
+    client = await get_temporal_client()
+    if not client:
+        return
+    try:
+        from workflows.reminders import ReminderWorkflow
+
+        await client.start_workflow(
+            ReminderWorkflow.run,
+            opportunity_id,
+            id=f"reminder-{opportunity_id}",
+            task_queue="beacon",
+        )
+    except WorkflowAlreadyStartedError:
+        pass
+    except Exception as e:
+        logger.warning(f"Failed to start ReminderWorkflow for {opportunity_id}: {e}")
+
+
+async def stop_reminder_workflow(opportunity_id: int):
+    client = await get_temporal_client()
+    if not client:
+        return
+    try:
+        handle = client.get_workflow_handle(f"reminder-{opportunity_id}")
+        await handle.cancel()
+    except Exception as e:
+        logger.warning(f"Failed to cancel ReminderWorkflow for {opportunity_id}: {e}")
 
 
 class TagColorUpdate(BaseModel):
@@ -119,7 +170,7 @@ def get_opportunities(
 
 
 @app.post("/api/todo/{opportunity_id}")
-def add_to_todo(opportunity_id: int):
+async def add_to_todo(opportunity_id: int):
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
@@ -141,13 +192,17 @@ def add_to_todo(opportunity_id: int):
             """
         cursor.execute(sql_insert, (opportunity_id,))
         conn.commit()
+
+        # Start Temporal Reminder Workflow
+        await start_reminder_workflow(opportunity_id)
+
         return {"message": "Added to To-Do", "opportunity_id": opportunity_id, "status": "active"}
     finally:
         conn.close()
 
 
 @app.delete("/api/todo/{opportunity_id}")
-def remove_from_todo(opportunity_id: int):
+async def remove_from_todo(opportunity_id: int):
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
@@ -159,13 +214,17 @@ def remove_from_todo(opportunity_id: int):
         sql_del = "DELETE FROM todo_items WHERE opportunity_id = %s" if DATABASE_URL else "DELETE FROM todo_items WHERE opportunity_id = ?"
         cursor.execute(sql_del, (opportunity_id,))
         conn.commit()
+
+        # Stop Temporal Reminder Workflow
+        await stop_reminder_workflow(opportunity_id)
+
         return {"message": "Removed from To-Do", "opportunity_id": opportunity_id}
     finally:
         conn.close()
 
 
 @app.patch("/api/todo/{opportunity_id}/toggle")
-def toggle_todo_status(opportunity_id: int):
+async def toggle_todo_status(opportunity_id: int):
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
@@ -190,6 +249,10 @@ def toggle_todo_status(opportunity_id: int):
                 else "UPDATE todo_items SET status = 'done', completed_at = ? WHERE opportunity_id = ?"
             )
             cursor.execute(sql_update, (now_iso, opportunity_id))
+            conn.commit()
+
+            # Terminate / Cancel Workflow
+            await stop_reminder_workflow(opportunity_id)
         else:
             new_status = "active"
             sql_update = (
@@ -198,7 +261,11 @@ def toggle_todo_status(opportunity_id: int):
                 else "UPDATE todo_items SET status = 'active', completed_at = NULL WHERE opportunity_id = ?"
             )
             cursor.execute(sql_update, (opportunity_id,))
-        conn.commit()
+            conn.commit()
+
+            # Start Workflow
+            await start_reminder_workflow(opportunity_id)
+
         return {"opportunity_id": opportunity_id, "status": new_status}
     finally:
         conn.close()
@@ -473,5 +540,51 @@ def assign_calendar_tag(opportunity_id: int, payload: CalendarTagUpdate):
         conn.commit()
 
         return {"message": "Calendar tag updated", "opportunity_id": opportunity_id, "tag_id": payload.tag_id}
+    finally:
+        conn.close()
+
+
+# --- Reminders Endpoints ---
+
+
+@app.get("/api/reminders")
+def get_reminders():
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        sql = """
+        SELECT r.id, r.opportunity_id, r.kind, r.due_at_utc, r.fired_at, r.message, r.seen,
+               o.title as opportunity_title
+        FROM reminders r
+        LEFT JOIN opportunities o ON r.opportunity_id = o.id
+        ORDER BY r.seen ASC, r.fired_at DESC, r.id DESC
+        LIMIT 20
+        """
+        cursor.execute(sql)
+        rows = cursor.fetchall()
+        items = []
+        for r in rows:
+            r_dict = dict(r)
+            r_dict["seen"] = bool(r_dict.get("seen"))
+            items.append(r_dict)
+        return items
+    finally:
+        conn.close()
+
+
+@app.post("/api/reminders/{id}/seen")
+def mark_reminder_seen(id: int):
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        sql_check = "SELECT id FROM reminders WHERE id = %s" if DATABASE_URL else "SELECT id FROM reminders WHERE id = ?"
+        cursor.execute(sql_check, (id,))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="Reminder not found")
+
+        sql_update = "UPDATE reminders SET seen = 1 WHERE id = %s" if DATABASE_URL else "UPDATE reminders SET seen = 1 WHERE id = ?"
+        cursor.execute(sql_update, (id,))
+        conn.commit()
+        return {"message": "Marked as seen", "id": id}
     finally:
         conn.close()
