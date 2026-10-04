@@ -45,6 +45,17 @@ Beacon Hub follows a simple principle:
 
 > **Code finds the facts. Gemma handles ambiguity. Code verifies the result.**
 
+## Services Used
+
+| Service | Purpose |
+|---|---|
+| **Gemma 3 4B + Ollama** | Local AI for resolving ambiguous dates and structured opportunity extraction |
+| **SerpApi** | Searches the web for relevant Cybersecurity, AI and Cloud opportunities |
+| **Temporal** | Runs durable reminder workflows and survives worker interruptions |
+| **Render** | Hosts the live Beacon Hub demo |
+| **SQLite** | Stores opportunities, To-Do items, Calendar entries and search logs |
+| **FastAPI** | Provides the backend API and serves the application |
+
 ```text
 SerpApi
    ↓
@@ -66,13 +77,4 @@ SQLite
    ↓
 Beacon Hub
 
-## Services Used
 
-| Service | Purpose |
-|---|---|
-| **Gemma 3 4B + Ollama** | Local AI for resolving ambiguous dates and structured opportunity extraction |
-| **SerpApi** | Searches the web for relevant Cybersecurity, AI and Cloud opportunities |
-| **Temporal** | Runs durable reminder workflows and survives worker interruptions |
-| **Render** | Hosts the live Beacon Hub demo |
-| **SQLite** | Stores opportunities, To-Do items, Calendar entries and search logs |
-| **FastAPI** | Provides the backend API and serves the application |
