@@ -1,4 +1,6 @@
 from fastapi import FastAPI, Query, HTTPException
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTMLResponse, FileResponse
 from typing import Optional, Dict, Any, List
 import math
 import logging
@@ -19,6 +21,12 @@ HEX_COLOR_REGEX = re.compile(r"^#[0-9a-fA-F]{6}$")
 TEMPORAL_TARGET = os.getenv("TEMPORAL_TARGET", "localhost:7233")
 
 app = FastAPI(title="Beacon Hub API")
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
+
+
+@app.get("/", response_class=HTMLResponse)
+def read_root():
+    return FileResponse("app/templates/index.html")
 
 # Ensure DB tables are initialized
 try:

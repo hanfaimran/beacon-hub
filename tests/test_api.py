@@ -113,3 +113,8 @@ def test_pagination_pages():
     d2 = res2.json()
     assert len(d2["items"]) == 4
     assert d2["page"] == 2
+
+def test_read_root():
+    res = client.get("/")
+    assert res.status_code == 200
+    assert "beacon-hub" in res.text

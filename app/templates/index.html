@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>beacon-hub</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="window-container">
+        <header class="title-bar">
+            <div class="title-bar-top">
+                <div class="title-bar-title">
+                    <div class="dots">
+                        <span class="dot"></span>
+                        <span class="dot"></span>
+                        <span class="dot"></span>
+                    </div>
+                    <span>beacon-hub</span>
+                </div>
+            </div>
+            <nav class="nav-tabs">
+                <button class="tab-btn active" data-domain="cyber">Cybersecurity</button>
+                <button class="tab-btn" data-domain="ai">AI</button>
+                <button class="tab-btn" data-domain="cloud">Cloud</button>
+                <button class="tab-btn" data-domain="todo">To-Do</button>
+                <button class="tab-btn" data-domain="calendar">Calendar</button>
+            </nav>
+        </header>
+
+        <main class="window-body">
+            <!-- Filter Section for Cyber/AI/Cloud -->
+            <section id="filter-section" class="filter-section">
+                <div class="chip-group" id="category-chips">
+                    <button class="chip active" data-category="">All</button>
+                    <button class="chip" data-category="event">Events/Meetups</button>
+                    <button class="chip" data-category="hackathon">Hackathons</button>
+                    <button class="chip" data-category="course">Courses</button>
+                    <button class="chip" data-category="internship">Internships</button>
+                    <button class="chip" data-category="certification">Free Certifications</button>
+                    <button class="chip" data-category="other">Other</button>
+                </div>
+                <div class="chip-group" id="mode-chips" style="display: none;">
+                    <button class="chip active" data-mode="">All</button>
+                    <button class="chip" data-mode="virtual">Virtual</button>
+                    <button class="chip" data-mode="in_person">In-person</button>
+                </div>
+            </section>
+
+            <!-- Main Content for Cyber/AI/Cloud -->
+            <div id="main-content">
+                <div class="pager-bar" id="pager-bar">
+                    <span id="pager-text">0-0 of 0</span>
+                    <div class="pager-controls">
+                        <button class="pager-btn" id="prev-page" disabled>◀</button>
+                        <button class="pager-btn" id="next-page" disabled>▶</button>
+                    </div>
+                </div>
+
+                <div class="cards-grid" id="cards-container"></div>
+            </div>
+
+            <!-- To-Do View -->
+            <div id="todo-view" style="display: none;">
+                <div id="reminders-banner-container"></div>
+
+                <section class="due-soon-container">
+                    <div class="due-soon-title">⚡ Due Soon</div>
+                    <div id="due-soon-items"></div>
+                    <div id="due-soon-note" class="gentle-note" style="display: none;"></div>
+                </section>
+
+                <div class="todo-sections">
+                    <section class="todo-section">
+                        <h2 class="section-title">Cybersecurity</h2>
+                        <div id="todo-cyber-list" class="todo-list"></div>
+                    </section>
+
+                    <section class="todo-section">
+                        <h2 class="section-title">AI</h2>
+                        <div id="todo-ai-list" class="todo-list"></div>
+                    </section>
+
+                    <section class="todo-section">
+                        <h2 class="section-title">Cloud</h2>
+                        <div id="todo-cloud-list" class="todo-list"></div>
+                    </section>
+                </div>
+
+                <section class="completed-section">
+                    <h2 class="section-title">Completed</h2>
+                    <div id="todo-completed-list" class="todo-list"></div>
+                </section>
+            </div>
+
+            <!-- Calendar View -->
+            <div id="calendar-view" style="display: none;">
+                <div class="calendar-layout">
+                    <div class="calendar-main">
+                        <div class="calendar-header">
+                            <button class="pager-btn" id="cal-prev-month">◀</button>
+                            <span id="cal-month-title" class="calendar-month-title"></span>
+                            <button class="pager-btn" id="cal-next-month">▶</button>
+                        </div>
+                        <div class="calendar-grid-scroll">
+                            <div class="calendar-grid" id="calendar-grid"></div>
+                        </div>
+                    </div>
+
+                    <div class="calendar-sidebar">
+                        <section class="tags-panel">
+                            <h3 class="panel-title">🏷️ Calendar Tags</h3>
+                            <div id="tags-list" class="tags-list"></div>
+                            <form id="new-tag-form" class="new-tag-form">
+                                <input type="text" id="new-tag-name" placeholder="Tag Name" required>
+                                <input type="color" id="new-tag-color" value="#c4a9f9" required>
+                                <button type="submit" class="pill-btn">+ Add Tag</button>
+                            </form>
+                        </section>
+
+                        <section id="detail-panel" class="detail-panel" style="display: none;">
+                            <div class="panel-header">
+                                <h3 class="panel-title">Details</h3>
+                                <button id="close-detail-btn" class="close-btn">✕</button>
+                            </div>
+                            <div id="detail-content" class="detail-content"></div>
+                        </section>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer class="footer">
+            <a href="http://www.freepik.com" target="_blank" rel="noopener">Designed by Freepik</a>
+        </footer>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
