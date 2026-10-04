@@ -1,5 +1,4 @@
 # beacon-hub
-# Beacon Hub
 
 > **Find → Save → Plan → Do.**
 
